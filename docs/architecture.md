@@ -6,14 +6,14 @@ Welcome to the technical architecture design document for **Lenny's Growth Assis
 
 ## 1. Introduction and Problem Space
 
-### ❌ The Core Problem
+### The Core Problems
 Lenny's Podcast hosts rich, multi-hour discussions with world-class product leaders, startup founders, and growth practitioners. However, this conversational data is highly unstructured, lengthy, and noisy. 
 1.  **Search Blindness**: Keyword search (lexical search) is unable to match high-level growth philosophies or abstract frameworks if exact keywords aren't present in the transcript.
 2.  **Context Limitations ("Lost in the Middle")**: Standard RAG architectures retrieve large blocks of disjointed conversation, which can bloat the LLM prompt, degrade generation quality, and cause latency spikes.
 3.  **Hallucination & Misattribution**: LLMs easily hallucinate concepts, inventing metrics or wrongly attributing a specific growth strategy to the wrong podcast guest.
 4.  **No Actionable Assets**: Standard chats return conversational text, failing to extract high-utility tools like checklist playbooks, tables, or step-by-step launch essays.
 
-### 🎯 The Solution
+### The Solution
 The **Lenny Growth Assistant** resolves this with an advanced hybrid RAG backend and a highly engaging, interactive three-panel frontend. By embedding conversational paragraphs, fusing dense and sparse search rankings, expanding adjacent contexts, routing queries through specialized agentic reasoning states, and verifying responses against raw transcripts, we deliver highly contextualized, verifiable answers and interactive artifacts (Claude-Style).
 
 ---
@@ -32,7 +32,7 @@ The application is designed around clean microservice boundaries, containerized 
 
 ---
 
-## 3. Database Schema and Graphical ERD
+## 3. Database Schema 
 
 The database runs on **PostgreSQL** inside Cloud Supabase, empowered by `pgvector` for vector similarity and relational integrity to track chat sessions, messages, artifacts, and retrieval traces.
 
@@ -228,7 +228,7 @@ When a user submits a query via the `POST /api/chat` endpoint:
     *   *RAG (Simple / Complex / Artifact)*: Directs the prompt to the retrieval stage.
 
 #### 2. Parallel RAG Retrieval Path
-*   **Vector Dense Search**: Gemini's `text-embedding-004` computes a 768-dimensional representation of the user prompt (or rewritten pronoun-resolved query) to run high-efficiency cosine similarity lookups against `transcript_chunks.embedding` using the Supabase **HNSW index**.
+*   **Vector Dense Search**: Gemini's `gemini-embedding-2` computes a 768-dimensional representation of the user prompt (or rewritten pronoun-resolved query) to run high-efficiency cosine similarity lookups against `transcript_chunks.embedding` using the Supabase **HNSW index**.
 *   **Sparse Lexical Search**: Runs alongside the dense search, executing keyword searches using the trigger-computed `tsvector` document and Gin index inside Supabase to fetch precise names, metrics, and technical keywords.
 
 #### 3. Fusion, Reranking & Diversity Optimization
