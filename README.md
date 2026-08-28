@@ -15,6 +15,17 @@
 
 ---
 
+## 📸 Application Interface Preview
+Here is a preview of the **Lennys Growth Assistant** dashboard, featuring a beautiful dark violet premium UI, three-column layout, and interactive artifacts sliding panel:
+
+<p align="center">
+  <img src="./image.png" alt="Lennys Growth Assistant Interface" width="100%" style="border-radius: 8px; border: 2px solid #7C3AED;" />
+</p>
+
+> 💡 *Note: This screenshot showcases the interactive 3-panel workspace, including live-streaming chat sessions, grounding reasoning, clickable timestamp citations, and the interactive side-panel table-of-contents.*
+
+---
+
 ## 🎙️ About Lenny's Podcast
 **Lenny's Podcast** is the #1 product and growth podcast in the world. Hosted by Lenny Rachitsky, it features in-depth interviews with world-class product leaders, growth practitioners, and legendary founders to uncover actionable frameworks, templates, and execution-level tactics.
 
