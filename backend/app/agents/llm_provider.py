@@ -218,7 +218,8 @@ class OllamaLocalProvider:
         - If no match, starts pulling the model in the background and raises an exception so fallback Gemini is used.
         """
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            # Fast check: connect & read timeout of 2.0 seconds to prevent hanging if local Ollama is offline
+            async with httpx.AsyncClient(timeout=2.0) as client:
                 r = await client.get(f"{self.base_url}/api/tags")
                 if r.status_code != 200:
                     return
@@ -285,7 +286,9 @@ class OllamaLocalProvider:
                 "stream": False
             }
 
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            # Fail fast within 3.0 seconds if local Ollama hangs or is unresponsive
+            timeout_config = httpx.Timeout(3.0, connect=2.0, read=30.0)
+            async with httpx.AsyncClient(timeout=timeout_config) as client:
                 r = await client.post(url, json=body)
                 r.raise_for_status()
                 data = r.json()
@@ -320,7 +323,9 @@ class OllamaLocalProvider:
                 "stream": True
             }
 
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            # Fail fast within 3.0 seconds if local Ollama hangs on initiating stream
+            timeout_config = httpx.Timeout(3.0, connect=2.0, read=60.0)
+            async with httpx.AsyncClient(timeout=timeout_config) as client:
                 async with client.stream("POST", url, json=body) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
