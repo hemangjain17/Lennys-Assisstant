@@ -22,44 +22,6 @@ The **Lenny Growth Assistant** resolves this with an advanced hybrid RAG backend
 
 The application is designed around clean microservice boundaries, containerized via Docker, and deployed in a hybrid cloud-local topology.
 
-```mermaid
-flowchart TB
-    %% Styles
-    classDef client fill:#050914,stroke:#7C3AED,stroke-width:2px,color:#fff;
-    classDef app fill:#131026,stroke:#EC4899,stroke-width:2px,color:#fff;
-    classDef cloud fill:#181532,stroke:#06B6D4,stroke-width:2px,color:#fff;
-    classDef storage fill:#0A0F1D,stroke:#10B981,stroke-width:2px,color:#fff;
-
-    %% Client Layer
-    subgraph Client_Layer [Client Layer - Local / Vercel]
-        A[Next.js 14 Web UI]:::client
-    end
-
-    %% Application Layer
-    subgraph Container_Boundary [Container Boundary - Docker Compose]
-        B[FastAPI Backend Server]:::app
-        C[Ollama Local Server]:::app
-    end
-
-    %% Cloud Infrastructure Layer
-    subgraph Cloud_Infrastructure [Cloud Infrastructure Layer]
-        D[Google Gemini API]:::cloud
-        E[Cohere Rerank API]:::cloud
-        F[(Supabase Cloud Postgres)]:::storage
-    end
-
-    %% Interconnections
-    A <-->|HTTP REST / SSE Stream| B
-    B <-->|Localhost REST| C
-    B <-->|HTTPS Rest| D
-    B <-->|HTTPS Rest| E
-    B <-->|TCP TLS Port 5432| F
-
-    style Client_Layer fill:#110f24,stroke:#7C3AED,color:#fff
-    style Container_Boundary fill:#0e1329,stroke:#EC4899,color:#fff
-    style Cloud_Infrastructure fill:#091d29,stroke:#06B6D4,color:#fff
-```
-
 ### ⚙️ Architectural Decisions & Rationale
 1.  **FastAPI (Backend)**: Chosen for its native support for asynchronous event loops, built-in type validation via Pydantic, and low-overhead streaming (SSE) support which is critical for real-time conversational apps.
 2.  **Next.js (Frontend)**: Standardized on App Router for optimal server-side pre-rendering, seamless routing, and client-side reactive components.
@@ -198,49 +160,97 @@ flowchart TD
 
 ## 5. "Pi" Agentic Retrieval, Routing and Synthesis
 
-When a user submits a query, it is not passed directly to a database search. It goes through a sophisticated Multi-Agent Pipeline directed by the **Pi Orchestrator**.
+When a user submits a query, it is not passed directly to a database search. It goes through a sophisticated Multi-Agent Pipeline directed by the **Pi Orchestrator**. The complete flow, detailing how user queries are routed, how context is retrieved from the database, and how streaming responses are verified and logged back to the database, is visualized below:
 
 ```mermaid
 flowchart TD
     %% Define Styles
-    classDef startEnd fill:#050914,stroke:#7C3AED,stroke-width:3px,color:#fff,font-weight:bold;
+    classDef client fill:#050914,stroke:#7C3AED,stroke-width:2px,color:#fff;
     classDef process fill:#131026,stroke:#EC4899,stroke-width:2px,color:#fff;
-    classDef decision fill:#181532,stroke:#06B6D4,stroke-width:2px,color:#fff;
     classDef db fill:#0A0F1D,stroke:#10B981,stroke-width:2px,color:#fff;
+    classDef routing fill:#181532,stroke:#06B6D4,stroke-width:2px,color:#fff;
 
     %% Nodes
-    A[User Query & Chat History]:::startEnd --> B{Node 1: Intent Classification}:::decision
+    A[User Query POST /api/chat]:::client --> B[Intent Classification <br/> Simple / Complex / Artifact]:::routing
     
-    B -- Chitchat / Out of Domain --> C[Direct Non-RAG Route]:::process
-    B -- RAG Route --> D[Node 2: Conversational Query Rewriter]:::process
-    
-    D --> E{Complex / Synthesis?}:::decision
-    E -- Yes --> F[Node 3: Query Decomposer & Expander]:::process
-    E -- No --> G[Node 4: Hybrid RAG Retriever]:::process
-    
-    F --> G
-    
-    G --> H[(Supabase Vector & FTS DB)]:::db
-    H --> I[RRF, Cohere Rerank & MMR Filter]:::process
-    I --> J[Node 5: LLM Response Generator]:::process
-    
-    J --> K[Node 6: Grounding & Citation Verifier]:::process
-    K --> L[SSE Streaming Output with Citations]:::startEnd
+    %% DB fetching for history
+    A -.->|1. Fetch Session History| DB_Sessions[(Supabase DB <br/> chat_sessions & chat_messages)]:::db
+    DB_Sessions -.->|Session History Context| B
 
-    %% Assign styles to specific nodes
+    B --> C[Parallel Retrieval Path]:::process
+    
+    C --> D[Vector Dense Search <br/> Supabase pgvector]:::db
+    C --> E[Full-Text Lexical Search <br/> Postgres GIN Index]:::db
+    
+    %% Read operations on chunks
+    DB_Chunks[(Supabase DB <br/> transcript_chunks)]:::db -->|Fetch Dense Vectors| D
+    DB_Chunks -->|Fetch Lexical Chunks| E
+
+    D --> F[Reciprocal Rank Fusion RRF]:::process
+    E --> F
+    
+    F --> G[Cohere Cross-Encoder Reranking <br/> Top 15 Candidates]:::process
+    G --> H[Smart Context Expansion <br/> Fetch Adjacent chunks]:::process
+    H --> I[MMR Diversity Reranking <br/> Redundant Info Filter]:::process
+    
+    I --> J{Specialized Skill Routing}:::routing
+    
+    J -- Standard PM Chat --> K[Standard System Prompt]:::process
+    J -- Essay Writing --> L[Ship 30 for 30 Skill]:::process
+    J -- Structured Artifacts --> M[Artifact Skill Builder]:::process
+    
+    K --> N[Gemini / Local Ollama LLM Engine]:::process
+    L --> N
+    M --> N
+    
+    N --> O[Grounding Verifier & Citation Injector]:::process
+    O --> P[SSE Token Streaming to Next.js Client]:::client
+
+    %% DB logging operations (Writes)
+    O -.->|2. Save Assistant Message| DB_Messages_Write[(Supabase DB <br/> chat_messages)]:::db
+    O -.->|3. Log Retrieval Traces| DB_Traces[(Supabase DB <br/> retrieval_traces)]:::db
+    O -.->|4. Save Generated Artifact| DB_Artifacts[(Supabase DB <br/> artifacts)]:::db
+
     style B fill:#1e1a3a,stroke:#EC4899
-    style E fill:#1e1a3a,stroke:#EC4899
-    style H fill:#0f2c20,stroke:#10B981
+    style J fill:#1a2b3c,stroke:#06B6D4
 ```
 
-### 🧩 Dynamic Routing & Agentic Node Logic
--   **Node 1: Intent Classification (`classify_query`)**: Filters out direct chitchat (e.g., "hello") or off-topic prompts (e.g., "write Python code") instantly to preserve credits and decrease latency.
--   **Node 2: Conversational Query Rewriter**: Standard vector databases fail on conversational questions like "What did he say next?". The rewriter resolves pronouns using conversation history into a standalone query.
--   **Node 3: Query Decomposer & Expander**: Synthesis and comparative questions (e.g. "Contrast Figma's growth loops with Slack's") are decomposed into multiple subqueries to extract dedicated contexts for both subjects.
--   **Node 4: Hybrid RAG Retriever**: Merges semantic meanings and keyword tokens.
--   **Node 5: Context Expansion**: Conversation features continuous context. The retriever automatically pulls the immediately preceding and succeeding dialogue lines of a match to feed the LLM a complete picture.
--   **Node 6: Maximal Marginal Relevance (MMR)**: Standard searches often retrieve highly repetitive statements from the same episode. MMR selects chunks that maximize similarity while keeping information unique.
--   **Node 7: Grounding & Citation Verifier**: Compares generated text against raw database sources to verify claims and insert YouTube link timestamps.
+### Complete System Operational Flow Explanation
+
+The agentic retrieval and reasoning process flows through the following stages:
+
+#### 1. Ingestion of Session History & Classification
+When a user submits a query via the `POST /api/chat` endpoint:
+*   The orchestrator first queries the database (`chat_sessions` and `chat_messages` tables) to retrieve previous conversation history, building a unified chronological window.
+*   **Intent Classification (`classify_query`)**: The prompt is processed to identify the target conversational path:
+    *   *Chitchat*: Handled without a database query to optimize latency and costs.
+    *   *Out of Domain*: Politeness boundary triggers standard response indicating unavailable context.
+    *   *RAG (Simple / Complex / Artifact)*: Directs the prompt to the retrieval stage.
+
+#### 2. Parallel RAG Retrieval Path
+*   **Vector Dense Search**: Gemini's `text-embedding-004` computes a 768-dimensional representation of the user prompt (or rewritten pronoun-resolved query) to run high-efficiency cosine similarity lookups against `transcript_chunks.embedding` using the Supabase **HNSW index**.
+*   **Sparse Lexical Search**: Runs alongside the dense search, executing keyword searches using the trigger-computed `tsvector` document and Gin index inside Supabase to fetch precise names, metrics, and technical keywords.
+
+#### 3. Fusion, Reranking & Diversity Optimization
+*   **Reciprocal Rank Fusion (RRF)**: Merges the sparse and dense results, sorting and normalizing candidate blocks into a single top-ranking pool.
+*   **Cohere Cross-Encoder Reranking**: The top-15 fused candidate chunks are scored via Cohere's API to measure exact relevance, filtering out low-scoring or off-topic items.
+*   **Smart Context Expansion**: To preserve the continuous flow of guest arguments, the system expands the context by fetching immediately adjacent dialogue blocks (`chunk_index - 1` and `chunk_index + 1`).
+*   **Maximal Marginal Relevance (MMR)**: Re-orders expanded segments to balance relevance with information diversity, filtering out duplicate or redundant statements from the same guest.
+
+#### 4. Specialized Skill Routing & LLM Generation
+The processed, diversified transcript contexts are enclosed within strong XML markers inside our **Sandwich Prompting** architecture. The orchestrator then routes the context to its corresponding skill:
+*   *Standard Chat*: Synthesizes grounded PM answers.
+*   *Essay Writing (`ship30`)*: Formulates a structured, high-conversion growth essay.
+*   *Artifact Builder*: Compiles checklists, dashboards, or pricing guides.
+The routed prompts are streamed token-by-token from **Google Gemini** or **Local Ollama** (Llama 3.1) via Server-Sent Events (SSE).
+
+#### 5. Post-Generation Verification & DB Logging Writes
+Before finalizing the SSE stream, a post-generation phase completes several background tasks:
+*   **Grounding & Citation Verification**: Evaluates the generated text against raw database sources to verify claims and insert YouTube link timestamps.
+*   **Relational Database Logging (Writes)**:
+    - Writes the final assistant response to the `chat_messages` table.
+    - Saves metadata, rewritten queries, subqueries, and retrieved chunk IDs inside `retrieval_traces` to audit and improve system retrieval precision.
+    - If a custom tool/dashboard was synthesized, writes it to the `artifacts` table so the frontend can retrieve and display it.
 
 ---
 
