@@ -17,7 +17,7 @@ export function Sidebar({
   onSelectSession,
   onNewChat,
   userProfile = {
-    name: "Rishabh Sharma",
+    name: "Lennys Explorer",
     plan: "Pro Plan",
     status: "Online",
   },
