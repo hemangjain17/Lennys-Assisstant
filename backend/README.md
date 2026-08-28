@@ -16,46 +16,43 @@ This directory contains the production-optimized, vector-based **FastAPI** backe
 
 ## ── 1. ARCHITECTURAL FLOW
 
-When a user query is received, the backend processes it through a robust, low-latency search, ranking, and generation pipeline:
+When a user query is received, the backend processes it through a robust, low-latency search, ranking, and generation pipeline. The entire flow is visualized in the Mermaid diagram below:
 
-```
-                  User Query (POST /api/chat)
-                             │
-                             ▼
-                    Intent Classification
-                   (Simple/Complex/Artifact)
-                             │
-                             ▼
-                     Hybrid Retrieval
-          ┌──────────────────┴──────────────────┐
-          │                                     │
-   Vector Dense Search                 Full-Text Lexical
-    (Supabase pgvector)              (Postgres GIN Index)
-          │                                     │
-          └──────────────────┬──────────────────┘
-                             │
-                             ▼
-                Reciprocal Rank Fusion (RRF)
-                   (Top 20–30 Candidates)
-                             │
-                             ▼
-                   Voyage AI / Cohere Rerank
-                    (Top 15 Cross-Encoded)
-                             │
-                             ▼
-                    Context Expansion
-                   (±1 Adjacent Chunks)
-                             │
-                             ▼
-                    MMR Diversity Rerank
-                             │
-                             ▼
-                   Specialized Skill Routing
-                   (Standard / Essay / Artifact)
-                             │
-                             ▼
-                     LLM Generation Stream
-                (Gemini / Local Ollama Llama 3.1)
+```mermaid
+flowchart TD
+    %% Define Styles
+    classDef client fill:#050914,stroke:#7C3AED,stroke-width:2px,color:#fff;
+    classDef process fill:#131026,stroke:#EC4899,stroke-width:2px,color:#fff;
+    classDef db fill:#0A0F1D,stroke:#10B981,stroke-width:2px,color:#fff;
+    classDef routing fill:#181532,stroke:#06B6D4,stroke-width:2px,color:#fff;
+
+    %% Nodes
+    A[User Query POST /api/chat]:::client --> B[Intent Classification <br/> Simple / Complex / Artifact]:::routing
+    
+    B --> C[Parallel Retrieval Path]:::process
+    
+    C --> D[Vector Dense Search <br/> Supabase pgvector]:::db
+    C --> E[Full-Text Lexical Search <br/> Postgres GIN Index]:::db
+    
+    D --> F[Reciprocal Rank Fusion RRF]:::process
+    E --> F
+    
+    F --> G[Cohere Cross-Encoder Reranking <br/> Top 15 Candidates]:::process
+    G --> H[Smart Context Expansion <br/> Fetch Adjacent chunks]:::process
+    H --> I[MMR Diversity Reranking <br/> Redundant Info Filter]:::process
+    
+    I --> J{Specialized Skill Routing}:::routing
+    
+    J -- Standard PM Chat --> K[Standard System Prompt]:::process
+    J -- Essay Writing --> L[Ship 30 for 30 Skill]:::process
+    J -- Structured Artifacts --> M[Artifact Skill Builder]:::process
+    
+    K --> N[Gemini / Local Ollama LLM Engine]:::process
+    L --> N
+    M --> N
+    
+    N --> O[Grounding Verifier & Citation Injector]:::process
+    O --> P[SSE Token Streaming to Next.js Client]:::client
 ```
 
 ---

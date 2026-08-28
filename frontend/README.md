@@ -13,6 +13,42 @@ This directory contains the production-optimized, highly responsive **Next.js** 
 
 ---
 
+## ── 1. FRONTEND DATA FLOW & ARCHITECTURE
+
+The frontend app layout features a premium dark-violet glassmorphism dashboard. It interacts with the FastAPI SSE (Server-Sent Events) backend through a real-time reactive architecture. The complete state, streaming, and UI layout flow are described in the Mermaid diagram below:
+
+```mermaid
+flowchart TD
+    %% Define Styles
+    classDef ui fill:#050914,stroke:#7C3AED,stroke-width:2px,color:#fff;
+    classDef logic fill:#131026,stroke:#EC4899,stroke-width:2px,color:#fff;
+    classDef server fill:#0A0F1D,stroke:#10B981,stroke-width:2px,color:#fff;
+    classDef panel fill:#181532,stroke:#06B6D4,stroke-width:2px,color:#fff;
+
+    %% Nodes
+    A[User Types Prompt in ChatComposer]:::ui --> B[Submit Chat Request via API]:::logic
+    B --> C[FastAPI Server-Sent Events SSE Stream]:::server
+    
+    C -- 1. SSE Status Chunks --> D[Update Honing Reasoning Widget]:::ui
+    C -- 2. SSE Content Tokens --> E[Append Word-by-Word Chat Stream]:::ui
+    C -- 3. SSE XML tags: artifact/ship30 --> F[Extract XML Content in real-time]:::logic
+    
+    F --> G[Slide Open Interactive Artifact Panel]:::panel
+    
+    %% Artifact Interactions
+    G --> H[Preview Mode: Render HTML inside Sandboxed iframe / Markdown Editor]:::panel
+    G --> I[Code Mode: View syntax-highlighted source code]:::panel
+    G --> J[Dynamic Section Navigator: Dynamic Table of Contents sidebar with 1-click smooth scroll]:::panel
+    G --> K[Export Actions: Copy-to-Clipboard / Download .html or .md files]:::panel
+
+    %% Responsive styling
+    style D fill:#1e1a3a,stroke:#EC4899
+    style E fill:#1e1a3a,stroke:#EC4899
+    style G fill:#092230,stroke:#06B6D4
+```
+
+---
+
 ## 📸 Dashboard Interface Preview
 
 Below is a preview of the **Lennys Growth Assistant** dashboard, showcasing the dark-violet glassmorphism workspace, interactive Chat interface, and the sliding Artifact Panel with dynamic Table of Contents navigation:
@@ -23,7 +59,7 @@ Below is a preview of the **Lennys Growth Assistant** dashboard, showcasing the 
 
 ---
 
-## ── 1. KEY FEATURES
+## ── 2. KEY FEATURES
 
 *   **📱 3-Panel Professional Layout**:
     - **Sidebar (Left Panel)**: Houses glowing brand headers (`> LennyGPT`), a gradient `[ + New Chat ]` creator, favorites filters, chronological session grouping (`Today`, `Yesterday`, `Earlier`), and a user profile card.
@@ -39,7 +75,7 @@ Below is a preview of the **Lennys Growth Assistant** dashboard, showcasing the 
 
 ---
 
-## ── 2. LOCAL MANUAL STARTUP (FOR DEVELOPMENT)
+## ── 3. LOCAL MANUAL STARTUP (FOR DEVELOPMENT)
 
 ### 1. Install Node.js Dependencies
 Make sure you have Node.js 18+ installed on your system. Navigate to the `frontend` folder and run:
@@ -62,7 +98,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to view the 
 
 ---
 
-## ── 3. PRODUCTION DOCKER DEPLOYMENT
+## ── 4. PRODUCTION DOCKER DEPLOYMENT
 
 The frontend utilizes a multi-stage Docker build that leverages Next.js **`standalone`** output configuration. This strips away all unnecessary node files, shrinking the final production image size by over 90% for lightning-fast deployments.
 
@@ -76,7 +112,7 @@ docker run -p 3000:3000 -e NEXT_PUBLIC_API_URL=http://localhost:8000 lenny-front
 
 ---
 
-## ── 4. STACK DETAILS
+## ── 5. STACK DETAILS
 
 - **Framework**: Next.js 14 (App Router)
 - **Styling**: Tailwind CSS & Glassmorphic variables in `app/globals.css`
