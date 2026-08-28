@@ -286,8 +286,8 @@ class OllamaLocalProvider:
                 "stream": False
             }
 
-            # Fail fast within 3.0 seconds if local Ollama hangs or is unresponsive
-            timeout_config = httpx.Timeout(3.0, connect=2.0, read=30.0)
+            # Fail fast within 8.0 seconds total if local Ollama hangs or is unresponsive (e.g. while loading model to VRAM)
+            timeout_config = httpx.Timeout(8.0, connect=2.0, read=8.0)
             async with httpx.AsyncClient(timeout=timeout_config) as client:
                 r = await client.post(url, json=body)
                 r.raise_for_status()
@@ -323,8 +323,8 @@ class OllamaLocalProvider:
                 "stream": True
             }
 
-            # Fail fast within 3.0 seconds if local Ollama hangs on initiating stream
-            timeout_config = httpx.Timeout(3.0, connect=2.0, read=60.0)
+            # Fail fast within 8.0 seconds total if local Ollama hangs on initiating stream
+            timeout_config = httpx.Timeout(8.0, connect=2.0, read=8.0)
             async with httpx.AsyncClient(timeout=timeout_config) as client:
                 async with client.stream("POST", url, json=body) as response:
                     response.raise_for_status()

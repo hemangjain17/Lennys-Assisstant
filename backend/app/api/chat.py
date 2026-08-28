@@ -134,22 +134,30 @@ async def _generate_and_save_title(session_id: str, first_message: str) -> str:
     client = get_supabase_client()
     words = [w for w in first_message.strip().split() if w]
     fallback_title = " ".join(words[:4]).title() if words else "Chat"
-    if len(fallback_title) > 30:
-        fallback_title = fallback_title[:27] + "..."
+    if not fallback_title.endswith("..."):
+        fallback_title = fallback_title + "..."
         
     try:
         # Set fallback immediately so it's never stuck on "New Chat"
         client.table("sessions").update({"title": fallback_title}).eq("id", session_id).execute()
 
         llm = GeminiProvider(model_name=settings.gemini_model_name or "gemini-3-flash-preview")
-        title_prompt = "Summarize the user question into a clean 3 to 5 word topic title for a chat thread. Output ONLY the title text. Do not use quotes or punctuation."
+        title_prompt = (
+            "Summarize the user's question into a high-quality, professional, and descriptive chat thread title. "
+            "Focus on the core subject, key guests, or growth frameworks (e.g. 'Brian Chesky On PMF' or 'Figma Growth Loops'). "
+            "Avoid starting with generic phrases like 'What are', 'How to', 'Write a', or 'Compare'. "
+            "Output ONLY the short summary text (max 4-5 words). Do not use quotes, punctuation, or trailing periods."
+        )
         llm_title = await llm.generate(
             messages=[{"role": "user", "content": first_message}],
             system_prompt=title_prompt,
             max_tokens=20
         )
         if llm_title and len(llm_title.strip()) > 1:
-            clean_title = llm_title.strip().strip('"').strip("'").strip(".").title()
+            clean_title = llm_title.strip().strip('"').strip("'").strip(".").strip()
+            clean_title = clean_title.title()
+            if not clean_title.endswith("..."):
+                clean_title = clean_title + "..."
             client.table("sessions").update({"title": clean_title}).eq("id", session_id).execute()
             logger.info(f"Updated session {session_id} title to: {clean_title}")
             return clean_title
