@@ -53,7 +53,7 @@ The data ingestion pipeline parses, cleanses, segments, embeds, and indexes conv
 graph TD
     A[Raw Transcript Data] --> B[Metadata Parser & Cleaner]
     B --> C[Structural Segmenter & Semantic Chunker]
-    C --> D[Gemini text-embedding-004]
+    C --> D[gemini-embedding-2]
     D --> E[(Supabase pgvector DB)]
     E --> F[Full-Text Search FTS Index]
     E --> G[HNSW Cosine Index]
