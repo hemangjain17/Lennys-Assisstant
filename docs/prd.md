@@ -4,23 +4,20 @@
 
 ## Metadata Information
 *   **Document Owner**: Hemang Jain
-*   **Current Status**: Approved / Ready for Implementation
-*   **Target Release Date**: August 28, 2026
-*   **Key Stakeholders**:
-    *   *Engineering Lead*: Hemang Jain
-    *   *Design Lead*: Hemang Jain
-    *   *Product Management / Marketing*: Lenny's Podcast Team
+*   **Deployed Link**: https://lenny-assisstant.vercel.app/ 
+*   **Submission Date**: August 28, 2026
+
 
 ---
 
 ## 1. Problem Statement and Objective
 
-### ❌ The Problem
+### The Problem
 Product Managers, Growth Marketers, and Startup Founders face a massive information-overload problem. **Lenny's Podcast** contains hundreds of episodes featuring top growth leaders, but extracting specific, high-fidelity business insights (such as growth benchmarks, onboarding models, or activation milestones) is exceptionally tedious. 
 *   **Unstructured conversational noise** makes standard search engines obsolete.
 *   **Traditional RAG tools** hallucinate quotes, suffer from "lost in the middle" context retrieval errors, misattribute frameworks to guests, and fail to provide exact citation validation.
 
-### 🎯 Objective
+### Objective
 To build an advanced, conversational growth assistant that indexes entire guest transcripts, enabling users to ask complex strategic questions and instantly receive streaming, fully cited answers with clickable YouTube timestamp links, accompanied by an interactive sidebar workspace (Claude-Style) for generating customized checklists, spreadsheets, or long-form strategic essays.
 
 ---
@@ -112,46 +109,20 @@ flowchart TD
 
 ### 🎨 2. Interactive Claude-Style Artifact Flow
 
-How the frontend detects, extracts, and separates structured files into the workspace panel:
+The frontend continuously monitors the live SSE token stream for structured artifact markers, allowing the assistant to separate reusable work products from ordinary chat responses. When the orchestrator produces a payload such as `<artifact title="Pricing Table" type="html">...`, the client immediately detects the tag boundaries, opens the workspace panel, and streams the raw document content into a dedicated code editor or artifact buffer.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Client (Next.js UI)
-    participant Pi as Pi Orchestrator (FastAPI)
-    participant AP as Artifact Panel (UI)
+This is intentionally designed to move beyond a standard chat experience. The user is not forced to wait for the entire response to finish before interacting with a usable artifact. Instead, the assistant can generate a pricing sheet, checklist, planner, or strategic memo while the frontend progressively captures, validates, and surfaces the output in a side panel.
 
-    User ->> Pi: "Generate a B2B SaaS pricing model table"
-    Pi ->> Pi: Retrieve context, RRF & MMR
-    Pi ->> Pi: Inject specialized Artifact Skill Prompts
-    Note over Pi: Formulates output structured inside <artifact> tags
-    
-    loop Real-time SSE Token Stream
-        Pi -->> User: "```xml
-<artifact title='Pricing Table' type='html'>..."
-        Note over User: Frontend scanner detects XML tag in stream
-        User ->> AP: Slide Open Workspace Panel in real-time
-        User ->> AP: Stream raw content into Code Mode
-    end
-    
-    Pi -->> User: "</artifact>```"
-    Note over User: Tag closes. Streaming completes.
-    User ->> AP: Compile markdown headers to Table of Contents
-    User ->> AP: Render preview inside isolated sandboxed iframe
-    User ->> AP: Enable Copy / Export buttons
-```
+The implementation approach is as follows:
 
----
+*   The backend composes artifact content inside explicit XML-like tags, ensuring structure is machine-readable and easy to parse.
+*   The frontend scanner watches the incoming stream for opening and closing tag boundaries, preserving partial content as it arrives.
+*   Once the artifact is detected, the panel opens in real-time and displays the raw payload in editable code mode, preserving the original structure for further refinement.
+*   Markdown headers or semantic sections are extracted to populate a side navigation or table of contents, making large outputs easier to scan.
+*   The rendered preview is isolated inside a sandboxed iframe with restricted permissions to prevent script execution and reduce XSS risk.
+*   A separate copy/export flow lets the user duplicate, modify, or download the artifact without leaving the conversational context.
 
-## 6. Acceptance Criteria
-
-*   **AC 1: Precision Retrieval**: For any query referencing a specific guest (e.g. "Anya Smith's cold start"), the retrieved context must prioritize that guest's transcript chunks above others.
-*   **AC 2: Zero Hallucination Guardrail**: The assistant must decline answering or politely explain if no relevant discussion was found inside the database instead of using pre-trained general knowledge.
-*   **AC 3: Real-Time Streaming**: Content must stream token-by-token using SSE with a Time to First Token (TTFT) under $300	ext{ms}$.
-*   **AC 4: Verified Citations**: Every factual growth assertion must include a clickable citation linked directly to the correct timestamp second on YouTube (`&t=X` format).
-*   **AC 5: Secure Artifact Rendering**: Generated HTML pages must run scripts safely inside an isolated sandboxed context, totally separated from the parent DOM, cookie, or API session scope.
-
----
+The intent is to transform generated insights into concrete, reusable strategic assets rather than ephemeral text. In practical terms, this allows a user to ask for a pricing model, benchmark table, onboarding checklist, or growth experiment plan and immediately work with a structured artifact in a Claude-style workflow while the conversation continues.
 
 ## 7. Risks and Mitigation Strategies
 
@@ -161,25 +132,3 @@ sequenceDiagram
     *Mitigation*: Run all database retrievals and external embedding calls concurrently using asynchronous asyncio functions, streaming tokens instantly before waiting for the entire document to compile.
 *   **Risk 3: Model Hallucinations in Citations**  
     *Mitigation*: A dedicated grounding verifier compares generated citations with the raw database `start_timestamp_seconds` field, automatically correcting or suppressing bad links before rendering.
-
----
-
-## 8. Implementation Plan
-
-```mermaid
-gantt
-    title Lenny Growth Assistant - Implementation Timeline
-    dateFormat  YYYY-MM-DD
-    section Phase 1: Database & Pipeline
-    Setup Schema & Vector DB           :active,   p1_1, 2026-08-01, 4d
-    Build Parse & Semantic Chunker    :active,   p1_2, 2026-08-05, 5d
-    section Phase 2: Orchestration
-    Build Pi Agent Routing             :          p2_1, 2026-08-10, 6d
-    Integrate Cohere & MMR             :          p2_2, 2026-08-15, 4d
-    section Phase 3: Frontend Dashboard
-    Build 3-Panel Premium UI           :          p3_1, 2026-08-18, 5d
-    Integrate Real-Time SSE Stream     :          p3_2, 2026-08-22, 3d
-    Implement Sandboxed Artifacts      :          p3_3, 2026-08-25, 4d
-```
-
----
