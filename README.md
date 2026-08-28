@@ -98,36 +98,55 @@ The **Pi Orchestrator** is a bounded agentic reasoning layer that wraps the LLM,
 ```mermaid
 flowchart TD
     %% Define Styles
-    classDef startEnd fill:#050914,stroke:#7C3AED,stroke-width:3px,color:#fff,font-weight:bold;
+    classDef client fill:#050914,stroke:#7C3AED,stroke-width:2px,color:#fff;
     classDef process fill:#131026,stroke:#EC4899,stroke-width:2px,color:#fff;
-    classDef decision fill:#181532,stroke:#06B6D4,stroke-width:2px,color:#fff;
     classDef db fill:#0A0F1D,stroke:#10B981,stroke-width:2px,color:#fff;
+    classDef routing fill:#181532,stroke:#06B6D4,stroke-width:2px,color:#fff;
 
     %% Nodes
-    A[User Query & Chat History]:::startEnd --> B{Node 1: Intent Classification}:::decision
+    A[User Query POST /api/chat]:::client --> B[Intent Classification <br/> Simple / Complex / Artifact]:::routing
     
-    B -- Chitchat / Out of Domain --> C[Direct Non-RAG Route]:::process
-    B -- RAG Route --> D[Node 2: Conversational Query Rewriter]:::process
-    
-    D --> E{Complex / Synthesis?}:::decision
-    E -- Yes --> F[Node 3: Query Decomposer & Expander]:::process
-    E -- No --> G[Node 4: Hybrid RAG Retriever]:::process
-    
-    F --> G
-    
-    G --> H[(Supabase Vector & FTS DB)]:::db
-    H --> I[RRF, Cohere Rerank & MMR Filter]:::process
-    I --> J[Node 5: LLM Response Generator]:::process
-    
-    J --> K[Node 6: Grounding & Citation Verifier]:::process
-    K --> L[SSE Streaming Output with Citations]:::startEnd
+    %% DB fetching for history
+    A -.->|1. Fetch Session History| DB_Sessions[(Supabase DB <br/> chat_sessions & chat_messages)]:::db
+    DB_Sessions -.->|Session History Context| B
 
-    %% Assign styles to specific nodes
+    B --> C[Parallel Retrieval Path]:::process
+    
+    C --> D[Vector Dense Search <br/> Supabase pgvector]:::db
+    C --> E[Full-Text Lexical Search <br/> Postgres GIN Index]:::db
+    
+    %% Read operations on chunks
+    DB_Chunks[(Supabase DB <br/> transcript_chunks)]:::db -->|Fetch Dense Vectors| D
+    DB_Chunks -->|Fetch Lexical Chunks| E
+
+    D --> F[Reciprocal Rank Fusion RRF]:::process
+    E --> F
+    
+    F --> G[Cohere Cross-Encoder Reranking <br/> Top 15 Candidates]:::process
+    G --> H[Smart Context Expansion <br/> Fetch Adjacent chunks]:::process
+    H --> I[MMR Diversity Reranking <br/> Redundant Info Filter]:::process
+    
+    I --> J{Specialized Skill Routing}:::routing
+    
+    J -- Standard PM Chat --> K[Standard System Prompt]:::process
+    J -- Essay Writing --> L[Ship 30 for 30 Skill]:::process
+    J -- Structured Artifacts --> M[Artifact Skill Builder]:::process
+    
+    K --> N[Gemini / Local Ollama LLM Engine]:::process
+    L --> N
+    M --> N
+    
+    N --> O[Grounding Verifier & Citation Injector]:::process
+    O --> P[SSE Token Streaming to Next.js Client]:::client
+
+    %% DB logging operations (Writes)
+    O -.->|2. Save Assistant Message| DB_Messages_Write[(Supabase DB <br/> chat_messages)]:::db
+    O -.->|3. Log Retrieval Traces| DB_Traces[(Supabase DB <br/> retrieval_traces)]:::db
+    O -.->|4. Save Generated Artifact| DB_Artifacts[(Supabase DB <br/> artifacts)]:::db
+
     style B fill:#1e1a3a,stroke:#EC4899
-    style E fill:#1e1a3a,stroke:#EC4899
-    style H fill:#0f2c20,stroke:#10B981
+    style J fill:#1a2b3c,stroke:#06B6D4
 ```
-
 ### 🧩 Node Breakdown & Purpose
 
 *   **Node 1: Intent Classification (`classify_query`)**  
@@ -152,6 +171,10 @@ flowchart TD
 ---
 
 ## 🎨 Claude-Style Interactive Artifact Panel
+
+<p align="center">
+  <img src="./Artifacts.png" alt="Lennys Growth Assistant Interface" width="100%" style="border-radius: 8px; border: 2px solid #7C3AED;" />
+</p>
 
 The **Artifact Panel** is an interactive, slide-over workspace inspired by Claude. When the Pi Orchestrator detects that a user request involves structured outputs (like an in-depth PM checklist, a SaaS pricing table, or a custom HTML layout), it uses the `<artifact>` tag to stream this content directly into a side-by-side workspace. 
 
