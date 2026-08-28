@@ -4,7 +4,7 @@ Welcome to the technical architecture design document for **Lenny's Growth Assis
 
 ---
 
-## ── 1. INTRODUCTION & PROBLEM SPACE
+## 1. Introduction and Problem Space
 
 ### ❌ The Core Problem
 Lenny's Podcast hosts rich, multi-hour discussions with world-class product leaders, startup founders, and growth practitioners. However, this conversational data is highly unstructured, lengthy, and noisy. 
@@ -18,7 +18,7 @@ The **Lenny Growth Assistant** resolves this with an advanced hybrid RAG backend
 
 ---
 
-## ── 2. COMPONENT BOUNDARIES & DEPLOYMENT TOPOLOGY
+## 2. Component Boundaries and Deployment Topology
 
 The application is designed around clean microservice boundaries, containerized via Docker, and deployed in a hybrid cloud-local topology.
 
@@ -31,18 +31,18 @@ flowchart TB
     classDef storage fill:#0A0F1D,stroke:#10B981,stroke-width:2px,color:#fff;
 
     %% Client Layer
-    subgraph Client Layer (Local / Vercel)
+    subgraph Client_Layer [Client Layer - Local / Vercel]
         A[Next.js 14 Web UI]:::client
     end
 
     %% Application Layer
-    subgraph Container Boundary (Docker Compose)
+    subgraph Container_Boundary [Container Boundary - Docker Compose]
         B[FastAPI Backend Server]:::app
         C[Ollama Local Server]:::app
     end
 
     %% Cloud Infrastructure Layer
-    subgraph Cloud Infrastructure Layer
+    subgraph Cloud_Infrastructure [Cloud Infrastructure Layer]
         D[Google Gemini API]:::cloud
         E[Cohere Rerank API]:::cloud
         F[(Supabase Cloud Postgres)]:::storage
@@ -55,9 +55,9 @@ flowchart TB
     B <-->|HTTPS Rest| E
     B <-->|TCP TLS Port 5432| F
 
-    style Client Layer fill:#110f24,stroke:#7C3AED,color:#fff
-    style Container Boundary fill:#0e1329,stroke:#EC4899,color:#fff
-    style Cloud Infrastructure Layer fill:#091d29,stroke:#06B6D4,color:#fff
+    style Client_Layer fill:#110f24,stroke:#7C3AED,color:#fff
+    style Container_Boundary fill:#0e1329,stroke:#EC4899,color:#fff
+    style Cloud_Infrastructure fill:#091d29,stroke:#06B6D4,color:#fff
 ```
 
 ### ⚙️ Architectural Decisions & Rationale
@@ -70,7 +70,7 @@ flowchart TB
 
 ---
 
-## ── 3. DATABASE SCHEMA & GRAPHICAL ERD
+## 3. Database Schema and Graphical ERD
 
 The database runs on **PostgreSQL** inside Cloud Supabase, empowered by `pgvector` for vector similarity and relational integrity to track chat sessions, messages, artifacts, and retrieval traces.
 
@@ -149,14 +149,14 @@ erDiagram
 1.  **Relation Integrity over Vector Databases**: Standard vector databases (e.g. Pinecone) are stateless and separate from relational data, requiring complex synchronization. Using PostgreSQL with `pgvector` lets us perform high-speed vector queries, full-text searches, and manage relational chat sessions inside a single, unified, ACID-compliant database.
 2.  **HNSW Indexing (Hierarchical Navigable Small World)**:
     - Cosine distance operations are accelerated using an HNSW index (`tc_hnsw_cosine_idx`).
-    - HNSW constructs a multi-layer graph to achieve logarithmic query times ($\mathcal{O}(\log N)$), ensuring sub-10ms similarity queries even as transcripts scale to millions of rows.
+    - HNSW constructs a multi-layer graph to achieve logarithmic query times ($\\mathcal{O}(\\log N)$), ensuring sub-10ms similarity queries even as transcripts scale to millions of rows.
 3.  **GIN Indexing (Generalized Inverted Index)**:
     - Configured for PostgreSQL Full-Text Search on a trigger-computed `tsvector` column (`fts_document`).
-    - It maps words to their containing rows, bypassing slow sequential scans ($\mathcal{O}(N)$) during keyword-focused retrieval.
+    - It maps words to their containing rows, bypassing slow sequential scans ($\\mathcal{O}(N)$) during keyword-focused retrieval.
 
 ---
 
-## ── 4. DATA INGESTION FLOW
+## 4. Data Ingestion Flow
 
 The ingestion process runs on a custom modular python pipeline. It takes raw text transcripts and converts them into semantically indexed database rows.
 
@@ -196,57 +196,44 @@ flowchart TD
 
 ---
 
-## ── 5. AGENTIC RETRIEVAL, ROUTING & SYNTHESIS
+## 5. "Pi" Agentic Retrieval, Routing and Synthesis
 
 When a user submits a query, it is not passed directly to a database search. It goes through a sophisticated Multi-Agent Pipeline directed by the **Pi Orchestrator**.
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Client (Next.js UI)
-    participant Pi as Pi Orchestrator (FastAPI)
-    participant C as Classifier Agent
-    participant R as Conversational Rewriter
-    participant E as Query Expander
-    participant DB as Supabase pgvector
-    participant CO as Cohere Rerank API
-    participant G as Grounding Verifier
-    participant LLM as Gemini / Ollama
+flowchart TD
+    %% Define Styles
+    classDef startEnd fill:#050914,stroke:#7C3AED,stroke-width:3px,color:#fff,font-weight:bold;
+    classDef process fill:#131026,stroke:#EC4899,stroke-width:2px,color:#fff;
+    classDef decision fill:#181532,stroke:#06B6D4,stroke-width:2px,color:#fff;
+    classDef db fill:#0A0F1D,stroke:#10B981,stroke-width:2px,color:#fff;
 
-    User ->> Pi: Send Prompt (POST /api/chat)
-    Pi ->> C: Classify Intent & Strategy
-    Note over C: Evaluates history & categorizes query
-    C -->> Pi: Route Signal (e.g. COMPLEX RAG)
+    %% Nodes
+    A[User Query & Chat History]:::startEnd --> B{Node 1: Intent Classification}:::decision
     
-    rect rgb(18, 15, 50)
-        Note over Pi, E: RAG Retrieval Sequence
-        Pi ->> R: Rewrite conversational follow-ups
-        R -->> Pi: Standalone query
-        Pi ->> E: Decompose comparative questions
-        E -->> Pi: 2-4 target subqueries
-        
-        par Parallel DB Search
-            Pi ->> DB: Vector Cosine Similarity Search
-            Pi ->> DB: Full-Text Sparse Lexical Search
-        end
-        DB -->> Pi: Candidate Transcript Chunks
-    end
-
-    Pi ->> Pi: Reciprocal Rank Fusion (RRF)
-    Pi ->> CO: Rerank Candidate Chunks (Top-15)
-    CO -->> Pi: Reranked relevance scores
-    Pi ->> Pi: Context Expansion (Fetch adjacent chunks)
-    Pi ->> Pi: Maximal Marginal Relevance (MMR) Diversity Filter
-
-    Pi ->> LLM: Stream Response (Sandwich Prompt + Context)
-    LLM -->> Pi: SSE Content Tokens (Streaming)
+    B -- Chitchat / Out of Domain --> C[Direct Non-RAG Route]:::process
+    B -- RAG Route --> D[Node 2: Conversational Query Rewriter]:::process
     
-    Pi ->> G: Audit Generated text vs Source Transcripts
-    G -->> Pi: Valid citations & click-ready timestamps
-    Pi -->> User: Final Verified Streaming Output
+    D --> E{Complex / Synthesis?}:::decision
+    E -- Yes --> F[Node 3: Query Decomposer & Expander]:::process
+    E -- No --> G[Node 4: Hybrid RAG Retriever]:::process
+    
+    F --> G
+    
+    G --> H[(Supabase Vector & FTS DB)]:::db
+    H --> I[RRF, Cohere Rerank & MMR Filter]:::process
+    I --> J[Node 5: LLM Response Generator]:::process
+    
+    J --> K[Node 6: Grounding & Citation Verifier]:::process
+    K --> L[SSE Streaming Output with Citations]:::startEnd
+
+    %% Assign styles to specific nodes
+    style B fill:#1e1a3a,stroke:#EC4899
+    style E fill:#1e1a3a,stroke:#EC4899
+    style H fill:#0f2c20,stroke:#10B981
 ```
 
-### 🧬 Dynamic Routing & Agentic Node Logic
+### 🧩 Dynamic Routing & Agentic Node Logic
 -   **Node 1: Intent Classification (`classify_query`)**: Filters out direct chitchat (e.g., "hello") or off-topic prompts (e.g., "write Python code") instantly to preserve credits and decrease latency.
 -   **Node 2: Conversational Query Rewriter**: Standard vector databases fail on conversational questions like "What did he say next?". The rewriter resolves pronouns using conversation history into a standalone query.
 -   **Node 3: Query Decomposer & Expander**: Synthesis and comparative questions (e.g. "Contrast Figma's growth loops with Slack's") are decomposed into multiple subqueries to extract dedicated contexts for both subjects.
@@ -257,14 +244,14 @@ sequenceDiagram
 
 ---
 
-## ── 6. EXACT CITATIONS & YOUTUBE TIMESTAMP MAPPING
+## 6. Exact Citations and YouTube Timestamp Mapping
 
 To guarantee complete auditability, Lenny's Growth Assistant maps every single citation back to the exact second in the YouTube video. 
 
 ### ⏱️ Timestamp Resolution Mechanism
 Our transcripts record start timestamps in conversational format (`HH:MM:SS` or `MM:SS`). During ingestion, these are parsed into raw integers representing seconds. When the LLM generates a cited fact, the **Grounding Verifier** checks the referenced transcript's metadata and constructs a dynamic, clickable hyperlink:
 
-$$	ext{YouTube Link} = 	ext{youtube\_url} \mathbin{\Vert} 	ext{"\&t="} \mathbin{\Vert} 	ext{start\_timestamp\_seconds} \mathbin{\Vert} 	ext{"s"}$$
+$$\\text{YouTube Link} = \\text{youtube\\_url} \\mathbin{\\Vert} \\text{"\\&t="} \\mathbin{\\Vert} \\text{start\\_timestamp\\_seconds} \\mathbin{\\Vert} \\text{"s"}$$
 
 *Example:* `https://youtube.com/watch?v=dQw4w9WgXcQ&t=1240s`
 
@@ -272,7 +259,7 @@ Users can click any citation bubble to jump directly to the exact millisecond th
 
 ---
 
-## ── 7. SECURITY & THREAT MODELING
+## 7. Security and Threat Modeling
 
 We implement strict defensive layers at every point of user-database interaction.
 
@@ -285,7 +272,7 @@ We implement strict defensive layers at every point of user-database interaction
 
 ---
 
-## ── 8. ARCHITECTURAL TRADE-OFFS & DECISIONS
+## 8. Architectural Trade-offs and Decisions
 
 ### 1. Hybrid Search vs. Pure Vector Search
 -   *The Naive Route*: Use pure vector similarity.
