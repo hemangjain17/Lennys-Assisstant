@@ -51,7 +51,7 @@ class GeminiProvider:
         messages: List[Dict],
         system_prompt: Optional[str] = None,
         temperature: float = 0.3,
-        max_tokens: int = 2048,
+        max_tokens: int = 4096,
     ) -> str:
         """Non-streaming generation. Returns full response string."""
         url = GEMINI_URL.format(model=self.model, key=self.api_key)
@@ -86,7 +86,7 @@ class GeminiProvider:
         messages: List[Dict],
         system_prompt: Optional[str] = None,
         temperature: float = 0.3,
-        max_tokens: int = 2048,
+        max_tokens: int = 4096,
     ) -> AsyncIterator[str]:
         """SSE streaming generation. Yields text chunks as they arrive."""
         url = GEMINI_STREAM_URL.format(model=self.model, key=self.api_key)
@@ -130,7 +130,7 @@ class OllamaCloudProvider:
         messages: List[Dict],
         system_prompt: Optional[str] = None,
         temperature: float = 0.3,
-        max_tokens: int = 2048,
+        max_tokens: int = 4096,
     ) -> str:
         url = f"{self.base_url}/chat/completions"
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
@@ -157,7 +157,7 @@ class OllamaCloudProvider:
         messages: List[Dict],
         system_prompt: Optional[str] = None,
         temperature: float = 0.3,
-        max_tokens: int = 2048,
+        max_tokens: int = 4096,
     ) -> AsyncIterator[str]:
         if not self.api_key or not settings.ollama_cloud_base_url:
             logger.warning(f"Ollama Cloud not fully configured, falling back to Gemini for model {self.model}")
@@ -265,7 +265,7 @@ class OllamaLocalProvider:
         messages: List[Dict],
         system_prompt: Optional[str] = None,
         temperature: float = 0.3,
-        max_tokens: int = 2048,
+        max_tokens: int = 4096,
     ) -> str:
         try:
             await self._ensure_model()
@@ -300,7 +300,7 @@ class OllamaLocalProvider:
         messages: List[Dict],
         system_prompt: Optional[str] = None,
         temperature: float = 0.3,
-        max_tokens: int = 2048,
+        max_tokens: int = 4096,
     ) -> AsyncIterator[str]:
         try:
             await self._ensure_model()

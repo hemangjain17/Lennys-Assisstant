@@ -278,7 +278,7 @@ class PiOrchestrator:
             messages=messages,
             system_prompt=PI_SYSTEM_PROMPT,
             temperature=0.3,
-            max_tokens=3000 if query_type == QueryType.ARTIFACT else 1500,
+            max_tokens=4096,  # Raised from 1500/3000 to prevent premature truncation of detailed growth analyses and strategic answers
         ):
             full_response_parts.append(token)
             yield token
