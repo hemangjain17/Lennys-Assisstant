@@ -2,7 +2,7 @@
 
 **Submitted by:** Hemang Jain  
 **Assessment:** FORWARD DEPLOYED ENGINEER • TAKE-HOME ASSESSMENT  
-*Confidential candidate assessment • Please do not redistribute*
+**Deployed Link:** <a href="https://lenny-assisstant.vercel.app/"> https://lenny-assisstant.vercel.app/ </a>
 
 ---
 
@@ -10,7 +10,6 @@
   <img src="https://img.shields.io/badge/Next.js-14-blueviolet?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" />
   <img src="https://img.shields.io/badge/FastAPI-v0.110-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/Supabase-Postgres-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
-  <img src="https://img.shields.io/badge/Gemini-Embeddings-4285F4?style=for-the-badge&logo=google-gemini&logoColor=white" alt="Gemini" />
   <img src="https://img.shields.io/badge/Cohere-Reranker-091E42?style=for-the-badge&logo=cohere&logoColor=white" alt="Cohere" />
 </p>
 
@@ -65,10 +64,6 @@ graph TD
 3.  **Maximal Marginal Relevance (MMR)**: Intentionally filters and diversifies search results to prevent the LLM context from being filled with repetitive statements from the same episode.
 4.  **Smart Context Expansion**: Automatically pulls adjacent chunks preceding and succeeding a highly relevant match, providing the LLM with the complete conversational thread.
 
-#### What We Excluded & Why:
-1.  **Native Audio-to-Text Processing**: Pre-processed transcripts were used to guarantee absolute text accuracy, avoiding common transcription errors (e.g. mistranscribed guest names or technical product terms).
-2.  **Multi-Tenant Authorization**: Out-of-scope for V1 to focus development and evaluation entirely on RAG performance, search precision, and the reasoning agent loop.
-
 ---
 
 ## ⚖️ Risks and Trade-offs
@@ -77,7 +72,7 @@ graph TD
 2.  **Latency vs. Quality**: Combining multi-query expansion, hybrid search, RRF, reranking, and agentic reasoning adds processing steps.  
     *Mitigation*: All vector and lexical database queries are run in parallel asynchronously. Response text is delivered token-by-token using **Server-Sent Events (SSE)** to provide a fast perceived speed.
 3.  **API Costs**: Heavy usage of Cohere Reranking and Gemini embeddings could scale costs quickly.  
-    *Mitigation*: We strictly limit reranking candidate size to the top-15 elements, and utilize a bounding strategy to shrink the retrieved context size before LLM synthesis.
+    *Mitigation*: We strictly limit reranking candidate size to the top-10 elements, and utilize a bounding strategy to shrink the retrieved context size before LLM synthesis.
 4.  **Local-Model Quality**: Running models like Llama 3.1 on Ollama locally lowers operational costs but requires heavy local resources (VRAM) and limits reasoning capabilities.  
     *Mitigation*: Built a dual-backend capability. You can seamlessly toggle between Google Gemini (Cloud) and Llama 3.1 (Ollama Local) depending on environment resources.
 5.  **Unsafe Artifact Rendering**: Allowing the LLM to generate custom HTML layouts risks Cross-Site Scripting (XSS) if the generated code is malicious or includes unauthorized script elements.  
@@ -206,133 +201,6 @@ Before running the application, you must initialize your database schema. If you
 2. In the left-hand navigation, click on **SQL Editor** (the `>_` icon).
 3. Create a **New Query**.
 4. Paste and execute the following SQL scripts (found in `backend/database/migrations/`) in sequential order:
-
-<details>
-<summary><b>Step 1: Enable Database Extensions (<code>001_extensions.sql</code>)</b></summary>
-
-```sql
--- Enable pgvector extension for dense vector support
-create extension if pnot exists vector;
-
--- Enable uuid-ossp extension for secure ID generation
-create extension if not exists "uuid-ossp";
-```
-</details>
-
-<details>
-<summary><b>Step 2: Create Episodes Table (<code>002_episodes.sql</code>)</b></summary>
-
-```sql
-create table if not exists episodes (
-    id uuid primary key default uuid_generate_v4(),
-    guest text not null,
-    title text not null,
-    description text,
-    youtube_url text,
-    video_id text,
-    content_hash text,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-```
-</details>
-
-<details>
-<summary><b>Step 3: Create Transcript Chunks Table (<code>003_chunks.sql</code>)</b></summary>
-
-```sql
-create table if not exists transcript_chunks (
-    id uuid primary key default uuid_generate_v4(),
-    episode_id uuid references episodes(id) on delete cascade not null,
-    chunk_index integer not null,
-    content text not null,
-    speaker text,
-    start_timestamp text,
-    start_timestamp_seconds integer,
-    end_timestamp text,
-    end_timestamp_seconds integer,
-    embedding vector(768), -- Google Gemini Embeddings (768 dimensions)
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-```
-</details>
-
-<details>
-<summary><b>Step 4: Create Chat Sessions & Messages Tables (<code>004_sessions.sql</code>)</b></summary>
-
-```sql
-create table if not exists chat_sessions (
-    id uuid primary key default uuid_generate_v4(),
-    title text default 'New Chat' not null,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
-create table if not exists chat_messages (
-    id uuid primary key default uuid_generate_v4(),
-    session_id uuid references chat_sessions(id) on delete cascade not null,
-    role text check (role in ('user', 'assistant')) not null,
-    content text not null,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-```
-</details>
-
-<details>
-<summary><b>Step 5: Create Interactive Artifacts Table (<code>006_artifacts.sql</code>)</b></summary>
-
-```sql
-create table if not exists artifacts (
-    id uuid primary key default uuid_generate_v4(),
-    session_id uuid references chat_sessions(id) on delete cascade not null,
-    message_id uuid references chat_messages(id) on delete cascade,
-    title text not null,
-    type text check (type in ('markdown', 'html')) not null,
-    content text not null,
-    version integer default 1 not null,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-```
-</details>
-
-<details>
-<summary><b>Step 6: Create Retrieval & Agentic Traces Table (<code>007_retrieval_traces.sql</code>)</b></summary>
-
-```sql
-create table if not exists retrieval_traces (
-    id uuid primary key default uuid_generate_v4(),
-    session_id uuid references chat_sessions(id) on delete cascade not null,
-    query text not null,
-    rewritten_query text,
-    subqueries jsonb, -- Stores query-expansion terms
-    retrieved_chunk_ids uuid[],
-    grounding_score float,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-```
-</details>
-
-<details>
-<summary><b>Step 7: Create Full-Text & Vector Indexes (<code>009_indexes.sql</code> to <code>011_vector_hnsw_index.sql</code>)</b></summary>
-
-```sql
--- 1. Create a Full-Text Search (FTS) index on chunk contents for lexical search
-alter table transcript_chunks add column if not exists fts_document tsvector;
-
-create or replace function transcript_chunks_trigger() returns trigger as $$
-begin
-    new.fts_document := to_tsvector('english', new.content);
-    return new;
-end
-$$ language plpgsql;
-
-create trigger tc_tsvector_update before insert or update
-on transcript_chunks for each row execute function transcript_chunks_trigger();
-
-create index if not exists tc_fts_idx on transcript_chunks using gin(fts_document);
-
--- 2. Create high-efficiency HNSW index for ultra-low latency vector searches
-create index if not exists tc_hnsw_cosine_idx on transcript_chunks using hnsw (embedding vector_cosine_ops);
-```
-</details>
 
 ---
 
