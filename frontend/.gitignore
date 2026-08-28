@@ -1,0 +1,27 @@
+# Node modules
+node_modules/
+
+# Next.js Build Output
+.next/
+out/
+build/
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDEs & System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Diagnostic logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
